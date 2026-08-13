@@ -3,6 +3,7 @@ package main
 import (
     "fmt"
     "bufio"
+    "encoding/json"
     "io"
     "os"
     "crypto/tls"
@@ -11,10 +12,24 @@ import (
     "strconv"
 )
 
+type entry struct {
+    ID string `json:"id"`
+    Name string `json:"name"`
+}
+
+func parseEntries(msg []byte) ([]entry, error) {
+    var response struct {
+        Data []entry `json:"data"`
+    }
+    if err := json.Unmarshal(msg, &response); err != nil {
+        return nil, err
+    }
+    return response.Data, nil
+}
 
 func main() {
     fmt.Println("Axis Connector Install String Regenerator")
-    fmt.Println("v1.0.0 by matt.hum@hpe.com")
+    fmt.Println("v1.0.1 by matt.hum@hpe.com")
 
     apikey := ""
     dat, err := os.ReadFile("apikey")
@@ -70,31 +85,16 @@ func main() {
     }
     msg, _ := io.ReadAll(res.Body)
     
-    data := strings.SplitAfter(string(msg),"[")[1]
-    data2 := strings.Split(data,"]")[0]
-    connectors:= strings.Split(data2,"},")
-    count:=len(connectors)
-    fmt.Println("I found", count, "connectors")
-    type entry struct {
-        id string
-        name string
-    }
     var arr []entry
+    arr, err = parseEntries(msg)
+    if err != nil {
+        fmt.Println("Error parsing connector response:", err)
+        panic(1)
+    }
+    count:=len(arr)
+    fmt.Println("I found", count, "connectors")
     for i:=0; i<count; i++ {
-        b:= strings.Split(connectors[i],",")
-        var t entry
-        for j:=0; j<4; j++ {
-            if strings.Contains(b[j],"id") {
-                c:=strings.Split(b[j],"\"")
-                t.id = strings.TrimSpace(c[3])
-            }
-            if strings.Contains(b[j],"\"name\"") {
-                c:=strings.Split(b[j],"\"")
-                t.name = strings.TrimSpace(c[3])
-                fmt.Printf("%v: %v\n",i,c[3])
-            }
-        }
-        arr = append(arr, t)
+        fmt.Printf("%v: %v\n",i,arr[i].Name)
     }
     text:=""
     fmt.Print("Enter number of connector to regen a command: ")
@@ -105,8 +105,8 @@ func main() {
     if err != nil {
         panic("Couldn't read number")
     }
-    fmt.Printf("Regenerating command for %v\n",arr[num].name)
-    url="https://admin-api.axissecurity.com/api/v1/connectors/"+arr[num].id+"/regenerate"
+    fmt.Printf("Regenerating command for %v\n",arr[num].Name)
+    url="https://admin-api.axissecurity.com/api/v1/connectors/"+arr[num].ID+"/regenerate"
 
     req, err = http.NewRequest(http.MethodPost, url, nil)
     if err != nil {
